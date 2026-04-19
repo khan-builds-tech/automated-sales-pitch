@@ -7,17 +7,20 @@ import { getTotalPitchCount, getEmailSentCount } from "@/lib/pitch-storage";
 import StatCard from "@/components/StatCard";
 import ActivityFeed from "@/components/ActivityFeed";
 import { Search, Sparkles, Mail, FileText, ArrowRight, Clock } from "lucide-react";
+import { useCurrentUser } from "@/lib/user-context";
 
 export default function DashboardPage() {
   const activity = useActivity();
   const searchHistory = useSearchHistory();
+  const currentUser = useCurrentUser();
+  const ownerFilter = currentUser.role === "admin" ? null : currentUser.email;
   const [savedPitches, setSavedPitches] = useState<number | null>(null);
   const [emailsSent, setEmailsSent] = useState<number | null>(null);
 
   useEffect(() => {
-    getTotalPitchCount().then(setSavedPitches).catch(() => setSavedPitches(0));
-    getEmailSentCount().then(setEmailsSent).catch(() => setEmailsSent(0));
-  }, []);
+    getTotalPitchCount(ownerFilter).then(setSavedPitches).catch(() => setSavedPitches(0));
+    getEmailSentCount(ownerFilter).then(setEmailsSent).catch(() => setEmailsSent(0));
+  }, [ownerFilter]);
 
   return (
     <div className="fade-in">

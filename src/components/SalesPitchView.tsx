@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AuditResult, SalesPitch } from "@/lib/types";
 import { getPitchByPlaceId, updatePitchStatus } from "@/lib/pitch-storage";
 import { Send, Phone, Mail, Eye, Edit3, Loader2, AlertCircle, Copy, CheckCircle2 } from "lucide-react";
+import { useCurrentUser } from "@/lib/user-context";
 
 interface Props {
   audit: AuditResult;
@@ -22,6 +23,8 @@ export default function SalesPitchView({ audit, pitch, onEmailSent }: Props) {
   const [copied, setCopied] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
   const [called, setCalled] = useState(false);
+  const currentUser = useCurrentUser();
+  const ownerFilter = currentUser.role === "admin" ? null : currentUser.email;
 
   const handleSend = async () => {
     if (!to.trim()) {
@@ -291,7 +294,7 @@ export default function SalesPitchView({ audit, pitch, onEmailSent }: Props) {
               onClick={() => {
                 const newValue = !called;
                 setCalled(newValue);
-                getPitchByPlaceId(audit.business.place_id).then((saved) => {
+                getPitchByPlaceId(audit.business.place_id, ownerFilter).then((saved) => {
                   if (saved) updatePitchStatus(saved.id, { called: newValue }).catch(() => {});
                 }).catch(() => {});
               }}

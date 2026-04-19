@@ -12,6 +12,7 @@ import AuditReport from "@/components/AuditReport";
 import SalesPitchView from "@/components/SalesPitchView";
 import { LeadStatus, AuditResult, SalesPitch } from "@/lib/types";
 import { savePitch as savePitchToFirestore, getPitchByPlaceId as getExistingPitch, updatePitchStatus } from "@/lib/pitch-storage";
+import { useCurrentUser } from "@/lib/user-context";
 import {
   ArrowLeft,
   Globe,
@@ -31,6 +32,8 @@ export default function LeadDetailPage() {
   const { toast } = useToast();
   const id = params.id as string;
   const lead = useLead(id);
+  const currentUser = useCurrentUser();
+  const ownerFilter = currentUser.role === "admin" ? null : currentUser.email;
 
   const [tab, setTab] = useState<"overview" | "audit" | "pitch">("overview");
   const [notes, setNotes] = useState("");
@@ -120,7 +123,10 @@ export default function LeadDetailPage() {
         const auditData = localAudit || lead.audit;
         if (auditData) {
           toast("Saving sales pitch...", "info");
-          savePitchToFirestore(auditData, data.email.subject)
+          savePitchToFirestore(auditData, data.email.subject, {
+            email: currentUser.email,
+            name: currentUser.name,
+          })
             .then(() => toast("Sales pitch saved!", "success"))
             .catch(() => { /* silent */ });
         }
@@ -137,7 +143,7 @@ export default function LeadDetailPage() {
     updateLead(id, { status: "contacted", emailSentAt: new Date().toISOString(), contactedAt: new Date().toISOString() });
     addActivity("email_sent", `Sent email to ${b.name}`, id);
     // Update Firestore
-    getExistingPitch(b.place_id).then((saved) => {
+    getExistingPitch(b.place_id, ownerFilter).then((saved) => {
       if (saved) updatePitchStatus(saved.id, { emailSent: true, recipientEmail }).catch(() => {});
     }).catch(() => {});
     toast("Email sent!", "success");

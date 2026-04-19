@@ -137,3 +137,18 @@ export interface AppStats {
   activeCampaigns: number;
   leadsByStatus: Record<LeadStatus, number>;
 }
+
+export type UserRole = 'admin' | 'staff';
+export type UserStatus = 'pending' | 'approved' | 'rejected';
+
+export interface AppUser {
+  uid: string;
+  email: string;
+  name: string;
+  photoUrl: string | null;
+  role: UserRole;
+  status: UserStatus;
+  createdAt: string;
+  approvedAt: string | null;
+  approvedBy: string | null;
+}

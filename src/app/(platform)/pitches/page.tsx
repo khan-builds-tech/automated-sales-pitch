@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { DocumentSnapshot } from "firebase/firestore";
-import { getPitches, getTotalPitchCount, getAllPitchesForExport, updatePitchStatus, deletePitches, SavedPitch } from "@/lib/pitch-storage";
+import { getPitches, getTotalPitchCount, getAllPitchesForExport, getDistinctOwners, updatePitchStatus, deletePitches, SavedPitch, OwnerOption } from "@/lib/pitch-storage";
 import PitchDetailModal from "@/components/PitchDetailModal";
 import { Search, Loader2, Download, ChevronLeft, ChevronRight, ArrowUpDown, Filter, Trash2, Send, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/lib/toast-context";
+import { useCurrentUser } from "@/lib/user-context";
 
 type SortField = "date" | "name" | "grade";
 type SortDir = "asc" | "desc";
@@ -47,13 +48,21 @@ export default function PitchesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [ownerEmailFilter, setOwnerEmailFilter] = useState<string>("");
+  const [ownerNameFilter, setOwnerNameFilter] = useState<string>("");
+  const [owners, setOwners] = useState<OwnerOption[]>([]);
   const { toast } = useToast();
+  const currentUser = useCurrentUser();
+  const isAdmin = currentUser.role === "admin";
+  const effectiveOwnerFilter = isAdmin
+    ? (ownerEmailFilter || null)
+    : currentUser.email;
 
   const loadPage = useCallback(async (page: number) => {
     setLoading(true);
     try {
       const cursor = pageCursors.get(page) ?? null;
-      const { pitches: data, lastDoc } = await getPitches(cursor, PAGE_SIZE);
+      const { pitches: data, lastDoc } = await getPitches(cursor, PAGE_SIZE, effectiveOwnerFilter);
       setPitches(data);
       if (lastDoc && !pageCursors.has(page + 1)) {
         setPageCursors((prev) => new Map(prev).set(page + 1, lastDoc));
@@ -62,12 +71,20 @@ export default function PitchesPage() {
       console.error("Failed to load pitches:", err);
     }
     setLoading(false);
-  }, [pageCursors]);
+  }, [pageCursors, effectiveOwnerFilter]);
 
   useEffect(() => {
+    setPageCursors(new Map([[1, null]]));
+    setCurrentPage(1);
     loadPage(1);
-    getTotalPitchCount().then(setTotalCount).catch(() => {});
-  }, []);
+    getTotalPitchCount(effectiveOwnerFilter).then(setTotalCount).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveOwnerFilter]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    getDistinctOwners().then(setOwners).catch(() => setOwners([]));
+  }, [isAdmin]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -188,6 +205,7 @@ export default function PitchesPage() {
     if (emailSentFilter !== "all") result = result.filter((p) => p.emailSent === (emailSentFilter === "yes"));
     if (calledFilter !== "all") result = result.filter((p) => p.called === (calledFilter === "yes"));
     if (convertedFilter !== "all") result = result.filter((p) => p.converted === (convertedFilter === "yes"));
+    if (isAdmin && ownerNameFilter) result = result.filter((p) => p.ownerName === ownerNameFilter);
 
     result.sort((a, b) => {
       let cmp = 0;
@@ -201,7 +219,7 @@ export default function PitchesPage() {
     });
 
     return result;
-  }, [pitches, searchQuery, sortField, sortDir, gradeFilter, emailSentFilter, calledFilter, convertedFilter]);
+  }, [pitches, searchQuery, sortField, sortDir, gradeFilter, emailSentFilter, calledFilter, convertedFilter, isAdmin, ownerNameFilter]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -211,8 +229,8 @@ export default function PitchesPage() {
   const handleExportCSV = async () => {
     setExporting(true);
     try {
-      const all = await getAllPitchesForExport();
-      const header = "Business Name,Address,Phone,Website,Grade,Email Sent,Called,Converted,Catchup Sent,Recipient Email\n";
+      const all = await getAllPitchesForExport(effectiveOwnerFilter);
+      const header = "Business Name,Address,Phone,Website,Grade,Email Sent,Called,Converted,Catchup Sent,Recipient Email,Owner\n";
       const escape = (s: string) => `"${(s || "").replace(/"/g, '""')}"`;
       const rows = all.map((p) =>
         [
@@ -226,6 +244,7 @@ export default function PitchesPage() {
           p.converted ? "Yes" : "No",
           p.catchupSent ? "Yes" : "No",
           escape(p.recipientEmail || "N/A"),
+          escape(p.ownerEmail || "N/A"),
         ].join(",")
       );
       const blob = new Blob([header + rows.join("\n")], { type: "text/csv" });
@@ -248,7 +267,12 @@ export default function PitchesPage() {
     return "text-[#ef4444] bg-[#ef4444]/10";
   };
 
-  const hasActiveFilters = gradeFilter !== "all" || emailSentFilter !== "all" || calledFilter !== "all" || convertedFilter !== "all";
+  const hasActiveFilters =
+    gradeFilter !== "all" ||
+    emailSentFilter !== "all" ||
+    calledFilter !== "all" ||
+    convertedFilter !== "all" ||
+    (isAdmin && (ownerEmailFilter !== "" || ownerNameFilter !== ""));
 
   return (
     <div className="fade-in">
@@ -256,7 +280,10 @@ export default function PitchesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Saved Pitches</h1>
-          <p className="text-sm text-[#888] mt-0.5">{totalCount} pitch{totalCount !== 1 ? "es" : ""} saved</p>
+          <p className="text-sm text-[#888] mt-0.5">
+            {totalCount} pitch{totalCount !== 1 ? "es" : ""}{" "}
+            {currentUser.role === "admin" ? "saved (all users)" : "saved by you"}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {selected.size > 0 && (
@@ -331,9 +358,46 @@ export default function PitchesPage() {
             className="appearance-none bg-[#111] border border-[#222] rounded-lg pl-2.5 pr-6 py-1.5 text-xs text-white outline-none cursor-pointer">
             <option value="all">Converted: All</option><option value="yes">Converted: Yes</option><option value="no">Converted: No</option>
           </select>
+          {isAdmin && (
+            <>
+              <select
+                value={ownerEmailFilter}
+                onChange={(e) => setOwnerEmailFilter(e.target.value)}
+                className="appearance-none bg-[#111] border border-[#222] rounded-lg pl-2.5 pr-6 py-1.5 text-xs text-white outline-none cursor-pointer max-w-[200px]"
+                title="Filter by owner email"
+              >
+                <option value="">Owner email: All</option>
+                {owners.map((o) => (
+                  <option key={`email-${o.email}`} value={o.email}>{o.email}</option>
+                ))}
+              </select>
+              <select
+                value={ownerNameFilter}
+                onChange={(e) => setOwnerNameFilter(e.target.value)}
+                className="appearance-none bg-[#111] border border-[#222] rounded-lg pl-2.5 pr-6 py-1.5 text-xs text-white outline-none cursor-pointer max-w-[200px]"
+                title="Filter by owner name"
+              >
+                <option value="">Owner name: All</option>
+                {Array.from(new Set(owners.map((o) => o.name).filter(Boolean))).map((n) => (
+                  <option key={`name-${n}`} value={n}>{n}</option>
+                ))}
+              </select>
+            </>
+          )}
           {hasActiveFilters && (
-            <button onClick={() => { setGradeFilter("all"); setEmailSentFilter("all"); setCalledFilter("all"); setConvertedFilter("all"); }}
-              className="text-xs text-[#ef4444] hover:text-[#f87171] cursor-pointer">Clear filters</button>
+            <button
+              onClick={() => {
+                setGradeFilter("all");
+                setEmailSentFilter("all");
+                setCalledFilter("all");
+                setConvertedFilter("all");
+                setOwnerEmailFilter("");
+                setOwnerNameFilter("");
+              }}
+              className="text-xs text-[#ef4444] hover:text-[#f87171] cursor-pointer"
+            >
+              Clear filters
+            </button>
           )}
         </div>
       </div>
@@ -367,6 +431,9 @@ export default function PitchesPage() {
                     Business {sortField === "name" && (sortDir === "asc" ? "↑" : "↓")}
                   </th>
                   <th className="text-left text-xs text-[#666] font-medium uppercase tracking-wider px-4 py-3.5">Phone</th>
+                  {currentUser.role === "admin" && (
+                    <th className="text-left text-xs text-[#666] font-medium uppercase tracking-wider px-4 py-3.5">Owner</th>
+                  )}
                   <th onClick={() => handleSort("grade")}
                     className="text-center text-xs text-[#666] font-medium uppercase tracking-wider px-3 py-3.5 cursor-pointer hover:text-white transition-colors">
                     Grade {sortField === "grade" && (sortDir === "asc" ? "↑" : "↓")}
@@ -395,6 +462,13 @@ export default function PitchesPage() {
                       <p className="text-xs text-[#666] mt-0.5 truncate max-w-[200px]">{p.businessAddress}</p>
                     </td>
                     <td className="px-4 py-3.5 text-sm text-[#888]">{p.businessPhone || "N/A"}</td>
+                    {currentUser.role === "admin" && (
+                      <td className="px-4 py-3.5 text-xs text-[#888]">
+                        <div className="truncate max-w-[160px]" title={p.ownerEmail}>
+                          {p.ownerName || p.ownerEmail || "—"}
+                        </div>
+                      </td>
+                    )}
                     <td className="px-3 py-3.5 text-center">
                       <span className={`text-xs px-2 py-1 rounded font-bold ${gradeColor(p.overallGrade)}`}>{p.overallGrade}</span>
                     </td>

@@ -16,6 +16,7 @@ import { addActivity, addSearchHistory, saveLead, generateId, isBusinessSaved, g
 import { useToast } from "@/lib/toast-context";
 import { savePitch as savePitchToFirestore, getPitchByPlaceId as getExistingPitch, getPitchedPlaceIds, updatePitchStatus, SavedPitch } from "@/lib/pitch-storage";
 import PitchDetailModal from "@/components/PitchDetailModal";
+import { useCurrentUser } from "@/lib/user-context";
 
 export default function SearchPage() {
   return (
@@ -40,6 +41,8 @@ function SearchPageInner() {
   const [showExistingPitchModal, setShowExistingPitchModal] = useState(false);
   const [savedPitchId, setSavedPitchId] = useState<string | null>(null);
   const { toast } = useToast();
+  const currentUser = useCurrentUser();
+  const ownerFilter = currentUser.role === "admin" ? null : currentUser.email;
 
   // Filters
   const [filters, setFilters] = useState<Filters>({ minRating: 0, websiteFilter: "all", pitchedFilter: "all" });
@@ -96,7 +99,7 @@ function SearchPageInner() {
 
         // Check which businesses already have saved pitches (non-blocking)
         const placeIds = (data.businesses as Business[]).map((b) => b.place_id);
-        getPitchedPlaceIds(placeIds).then(setPitchedIds).catch(() => { /* silent */ });
+        getPitchedPlaceIds(placeIds, ownerFilter).then(setPitchedIds).catch(() => { /* silent */ });
       } else {
         setError("No businesses found. Try a different search.");
       }
@@ -137,7 +140,7 @@ function SearchPageInner() {
     setError("");
 
     // Check Firestore for existing pitch (non-blocking)
-    getExistingPitch(biz.place_id).then((saved) => {
+    getExistingPitch(biz.place_id, ownerFilter).then((saved) => {
       if (saved) {
         setExistingPitch(saved);
         toast("A pitch was already generated for this business", "info");
@@ -168,7 +171,7 @@ function SearchPageInner() {
       setStep("select");
     }
     setLoading(false);
-  }, [selectedBiz, audit, toast]);
+  }, [selectedBiz, audit, toast, ownerFilter]);
 
   const handleGeneratePitch = useCallback(async () => {
     if (!audit) return;
@@ -205,7 +208,10 @@ function SearchPageInner() {
 
       // Auto-save to Firestore
       toast("Saving sales pitch...", "info");
-      savePitchToFirestore(audit, data.email.subject)
+      savePitchToFirestore(audit, data.email.subject, {
+        email: currentUser.email,
+        name: currentUser.name,
+      })
         .then((docId) => { setSavedPitchId(docId); toast("Sales pitch saved!", "success"); })
         .catch(() => { /* silent */ });
     } catch {
@@ -213,7 +219,7 @@ function SearchPageInner() {
       setStep("audit");
     }
     setLoading(false);
-  }, [audit, pitch, toast]);
+  }, [audit, pitch, toast, currentUser.email, currentUser.name]);
 
   const handleEmailSent = useCallback((recipientEmail: string) => {
     if (audit) {
@@ -227,13 +233,13 @@ function SearchPageInner() {
       if (savedPitchId) {
         updatePitchStatus(savedPitchId, firestoreUpdate).catch(() => {});
       } else {
-        getExistingPitch(audit.business.place_id).then((saved) => {
+        getExistingPitch(audit.business.place_id, ownerFilter).then((saved) => {
           if (saved) updatePitchStatus(saved.id, firestoreUpdate).catch(() => {});
         }).catch(() => {});
       }
       toast("Email sent successfully!", "success");
     }
-  }, [audit, toast, savedPitchId]);
+  }, [audit, toast, savedPitchId, ownerFilter]);
 
   const handleSaveLead = useCallback((biz: Business) => {
     if (isBusinessSaved(biz.place_id)) {
