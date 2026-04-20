@@ -2,6 +2,12 @@ import { NextRequest } from "next/server";
 import OpenAI from "openai";
 import { AuditResult } from "@/lib/types";
 
+function getCalendlyUrl(): string {
+  const raw = process.env.CALENDLY_URL?.trim();
+  if (!raw) return "https://calendly.com/infra2rise";
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
+
 const INFRA2RISE_CONTEXT = `
 COMPANY: Infra2Rise
 HEADQUARTERED: Dubai (IFZA Business Park, Dubai Silicon Oasis)
@@ -76,6 +82,8 @@ function buildAuditSummary(audit: AuditResult): string {
 
 function buildEmailHTML(subject: string, body: string, audit: AuditResult): string {
   const biz = audit.business;
+  const calendlyUrl = getCalendlyUrl();
+  const calendlyDisplay = calendlyUrl.replace(/^https?:\/\//, "");
   const gradeColor = audit.overallGrade.startsWith("A") ? "#22c55e"
     : audit.overallGrade === "B" ? "#3b82f6"
     : audit.overallGrade === "C" ? "#eab308"
@@ -119,6 +127,17 @@ function buildEmailHTML(subject: string, body: string, audit: AuditResult): stri
         <span style="font-size: 36px; font-weight: 800; color: ${gradeColor};">${audit.overallGrade}</span>
       </div>
       <p style="color: #6b7280; font-size: 13px; margin: 10px 0 0; font-weight: 500;">Overall Digital Grade</p>
+    </div>
+
+    <!-- Top CTA: Book a call -->
+    <div style="background: #ffffff; padding: 20px 32px 28px; text-align: center; border-bottom: 1px solid #e5e7eb;">
+      <p style="color: #111827; font-size: 15px; margin: 0 0 14px; font-weight: 600;">Want to walk through these findings with us?</p>
+      <a href="${calendlyUrl}" style="display: inline-block; background: #1a56db; color: #ffffff; font-weight: 700; font-size: 14px; padding: 12px 28px; border-radius: 10px; text-decoration: none;">
+        📅 Book a free 15-minute call
+      </a>
+      <p style="color: #6b7280; font-size: 12px; margin: 12px 0 0;">
+        Or open <a href="${calendlyUrl}" style="color: #1a56db; text-decoration: underline;">${calendlyDisplay}</a> to pick a time that works for you
+      </p>
     </div>
 
     <!-- Scores Table -->
@@ -187,7 +206,8 @@ function buildEmailHTML(subject: string, body: string, audit: AuditResult): stri
     <div style="background: linear-gradient(135deg, #1a56db 0%, #1e40af 100%); padding: 36px 32px; text-align: center;">
       <h2 style="color: #ffffff; margin: 0 0 10px; font-size: 20px; font-weight: 700;">Ready to Grow Your Business?</h2>
       <p style="color: #bfdbfe; margin: 0 0 24px; font-size: 14px; line-height: 1.5;">Book a free consultation with our team — no commitment required.</p>
-      <a href="https://www.infra2rise.com/it/services" style="display: inline-block; background: #ffffff; color: #1a56db; font-weight: 700; font-size: 15px; padding: 14px 36px; border-radius: 10px; text-decoration: none;">Schedule a Call</a>
+      <a href="${calendlyUrl}" style="display: inline-block; background: #ffffff; color: #1a56db; font-weight: 700; font-size: 15px; padding: 14px 36px; border-radius: 10px; text-decoration: none;">📅 Schedule a Call</a>
+      <p style="color: #bfdbfe; font-size: 12px; margin: 14px 0 0;">${calendlyDisplay}</p>
     </div>
 
     <!-- Footer -->
