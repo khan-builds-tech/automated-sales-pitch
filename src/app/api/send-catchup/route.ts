@@ -9,10 +9,17 @@ interface CatchupPayload {
   businessWebsite?: string | null;
 }
 
+function getCalendlyUrl(): string {
+  const raw = process.env.CALENDLY_URL?.trim();
+  if (!raw) return "https://calendly.com/infra2rise";
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
+
 function buildCatchupHTML(payload: CatchupPayload): string {
   const { businessName, overallGrade, businessWebsite } = payload;
   const firmEmail = process.env.FIRM_EMAIL || "infra2rise@gmail.com";
   const firmPhone = process.env.FIRM_PHONE || "";
+  const CALENDLY_URL = getCalendlyUrl();
 
   const gradeColor =
     overallGrade.startsWith("A") ? "#22c55e" :
@@ -45,14 +52,25 @@ function buildCatchupHTML(payload: CatchupPayload): string {
     </div>
 
     <div style="background: #ffffff; padding: 32px;">
+      <div style="margin: 0 0 24px; padding: 16px 18px; background: #eff6ff; border-left: 4px solid #1a56db; border-radius: 6px;">
+        <p style="margin: 0 0 10px; color: #1e3a8a; font-size: 14px; font-weight: 600;">📅 Want to skip the back-and-forth? Pick a time that works.</p>
+        <a href="${CALENDLY_URL}"
+          style="display: inline-block; background: #1a56db; color: #ffffff; font-weight: 600; font-size: 13px; padding: 10px 20px; border-radius: 8px; text-decoration: none;">
+          Schedule a 20-minute call →
+        </a>
+      </div>
+
       ${bodyHTML}
 
       <div style="margin: 28px 0 8px;">
-        <a href="mailto:${firmEmail}?subject=${encodeURIComponent("Re: " + payload.originalSubject)}"
+        <a href="${CALENDLY_URL}"
           style="display: inline-block; background: #1a56db; color: #ffffff; font-weight: 600; font-size: 14px; padding: 12px 26px; border-radius: 10px; text-decoration: none;">
           Book a 20-minute call
         </a>
-        <p style="margin: 12px 0 0; color: #6b7280; font-size: 13px;">Worth a quick call this week?</p>
+        <p style="margin: 12px 0 0; color: #6b7280; font-size: 13px;">
+          Worth a quick call this week? Or just reply to
+          <a href="mailto:${firmEmail}?subject=${encodeURIComponent("Re: " + payload.originalSubject)}" style="color: #1a56db; text-decoration: underline;">${firmEmail}</a>.
+        </p>
       </div>
     </div>
 

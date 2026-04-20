@@ -1,9 +1,16 @@
 import { AuditResult } from "./types";
 
+function getCalendlyUrl(): string {
+  const raw = process.env.CALENDLY_URL?.trim();
+  if (!raw) return "https://calendly.com/infra2rise";
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
+
 export function generateEmailDraft(audit: AuditResult): { subject: string; body: string; html: string } {
   const firmName = "Your Consulting Firm";
   const biz = audit.business;
   const hasWebsite = audit.hasWebsite;
+  const CALENDLY_URL = getCalendlyUrl();
 
   const subject = hasWebsite
     ? `${biz.name} — Your Website Audit Results & Growth Opportunities`
@@ -30,6 +37,8 @@ export function generateEmailDraft(audit: AuditResult): { subject: string; body:
 
 I recently came across your business and took the time to analyze your online presence. I wanted to share some insights that could help you attract more customers and grow your revenue.
 
+📅 Prefer to jump straight to a conversation? Grab a time here: ${CALENDLY_URL}
+
 WEBSITE AUDIT RESULTS
 Overall Grade: ${audit.overallGrade}
 
@@ -53,6 +62,8 @@ ${firmName}` : `Hi ${biz.name} Team,
 
 I noticed that your business doesn't currently have a website, and I wanted to reach out because I believe there's a tremendous growth opportunity you're missing out on.
 
+📅 Prefer to jump straight to a conversation? Grab a time here: ${CALENDLY_URL}
+
 WHY DIGITAL PRESENCE MATTERS
   • 97% of consumers search online for local businesses
   • Businesses with websites generate 2-3x more leads
@@ -75,12 +86,12 @@ Best regards,
 ${firmName}`;
 
   // HTML version
-  const html = generateHTML(audit, firmName);
+  const html = generateHTML(audit, firmName, CALENDLY_URL);
 
   return { subject, body, html };
 }
 
-function generateHTML(audit: AuditResult, firmName: string): string {
+function generateHTML(audit: AuditResult, firmName: string, CALENDLY_URL: string): string {
   const biz = audit.business;
   const gradeColor = audit.overallGrade.startsWith("A") ? "#22c55e"
     : audit.overallGrade === "B" ? "#3b82f6"
@@ -141,6 +152,17 @@ function generateHTML(audit: AuditResult, firmName: string): string {
       <p style="color: #888; font-size: 13px; margin: 8px 0 0;">Overall Grade</p>
     </div>
 
+    <!-- Top CTA: Book a call -->
+    <div style="background: #ffffff; padding: 20px 24px 24px; text-align: center; border-bottom: 1px solid #eee;">
+      <p style="color: #1a1a2e; font-size: 15px; margin: 0 0 12px; font-weight: 600;">Want to talk through these findings live?</p>
+      <a href="${CALENDLY_URL}" style="display: inline-block; background: #1a56db; color: #ffffff; font-weight: 600; font-size: 14px; padding: 12px 26px; border-radius: 10px; text-decoration: none;">
+        📅 Book a 15-minute call
+      </a>
+      <p style="color: #888; font-size: 12px; margin: 10px 0 0;">
+        Or open <a href="${CALENDLY_URL}" style="color: #1a56db; text-decoration: underline;">${CALENDLY_URL.replace(/^https?:\/\//, "")}</a> to pick a time
+      </p>
+    </div>
+
     <!-- Scores -->
     <div style="background: white; padding: 24px;">
       <h2 style="color: #1a1a2e; font-size: 16px; margin: 0 0 16px; padding-bottom: 8px; border-bottom: 2px solid #f0f0f0;">
@@ -173,7 +195,10 @@ function generateHTML(audit: AuditResult, firmName: string): string {
     <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 0 0 16px 16px; padding: 32px; text-align: center;">
       <h2 style="color: white; margin: 0 0 8px; font-size: 18px;">Ready to Grow?</h2>
       <p style="color: #bfdbfe; margin: 0 0 20px; font-size: 14px;">Let's discuss how we can help ${biz.name} reach its full potential.</p>
-      <p style="color: #93c5fd; font-size: 13px; margin: 0;">Simply reply to this email to schedule a free consultation.</p>
+      <a href="${CALENDLY_URL}" style="display: inline-block; background: #ffffff; color: #1d4ed8; font-weight: 600; font-size: 14px; padding: 12px 26px; border-radius: 10px; text-decoration: none;">
+        📅 Schedule a free consultation
+      </a>
+      <p style="color: #bfdbfe; font-size: 12px; margin: 14px 0 0;">Or reply to this email directly.</p>
     </div>
 
     <!-- Footer -->
