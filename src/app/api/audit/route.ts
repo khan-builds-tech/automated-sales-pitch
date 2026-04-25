@@ -105,81 +105,117 @@ async function discoverSocialMedia(businessName: string, address: string, apiKey
   return profiles;
 }
 
-async function getPageSpeedScores(website: string): Promise<AuditScore[]> {
+interface PageSpeedResult {
+  scores: AuditScore[];
+  error?: string;
+}
+
+async function fetchPageSpeed(url: string, timeoutMs: number): Promise<{ data?: { error?: { message?: string }; lighthouseResult?: { categories?: Record<string, { score?: number }>; audits?: Record<string, { score?: number; displayValue?: string }> } }; error?: string }> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok) {
+      return { error: `PageSpeed HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    if (data.error) {
+      return { error: `PageSpeed API: ${data.error.message || "unknown error"}` };
+    }
+    return { data };
+  } catch (err) {
+    const name = (err as Error)?.name;
+    const msg = (err as Error)?.message || String(err);
+    if (name === "TimeoutError" || name === "AbortError") {
+      return { error: "timeout" };
+    }
+    return { error: `fetch failed: ${msg}` };
+  }
+}
+
+async function getPageSpeedScores(website: string): Promise<PageSpeedResult> {
   const apiKey = process.env.PAGESPEED_API_KEY;
   const categories = ["performance", "seo", "accessibility", "best_practices"];
   const catParams = categories.map(c => `category=${c.toUpperCase()}`).join("&");
   const url = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(website)}&${catParams}${apiKey ? `&key=${apiKey}` : ""}`;
 
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
-    const data = await res.json();
-
-    if (data.error) {
-      return generateEstimatedScores();
-    }
-
-    const cats = data.lighthouseResult?.categories || {};
-    const scores: AuditScore[] = [];
-
-    if (cats.performance) {
-      const perfScore = Math.round((cats.performance.score || 0) * 100);
-      scores.push({
-        label: "Performance",
-        score: perfScore,
-        details: getPerformanceDetails(perfScore, data.lighthouseResult?.audits),
-      });
-    }
-
-    if (cats.seo) {
-      const seoScore = Math.round((cats.seo.score || 0) * 100);
-      scores.push({
-        label: "SEO",
-        score: seoScore,
-        details: getSEODetails(seoScore, data.lighthouseResult?.audits),
-      });
-    }
-
-    if (cats.accessibility) {
-      const a11yScore = Math.round((cats.accessibility.score || 0) * 100);
-      scores.push({
-        label: "Accessibility",
-        score: a11yScore,
-        details: getAccessibilityDetails(a11yScore),
-      });
-    }
-
-    if (cats["best_practices"]) {
-      const bpScore = Math.round((cats["best_practices"].score || 0) * 100);
-      scores.push({
-        label: "Best Practices",
-        score: bpScore,
-        details: getBestPracticesDetails(bpScore),
-      });
-    }
-
-    const perfVal = scores.find(s => s.label === "Performance")?.score || 50;
-    const a11yVal = scores.find(s => s.label === "Accessibility")?.score || 50;
-    const uxScore = Math.round((perfVal * 0.4 + a11yVal * 0.6));
-    scores.push({
-      label: "UX / Design",
-      score: uxScore,
-      details: getUXDetails(uxScore),
-    });
-
-    return scores;
-  } catch {
-    return generateEstimatedScores();
+  let attempt = await fetchPageSpeed(url, 75000);
+  if (attempt.error === "timeout") {
+    console.warn(`[audit] PageSpeed timed out for ${website}, retrying once`);
+    attempt = await fetchPageSpeed(url, 75000);
   }
+
+  if (!attempt.data) {
+    const reason = attempt.error === "timeout"
+      ? "PageSpeed Insights timed out — the site may be too slow or large to analyze automatically"
+      : `PageSpeed Insights could not analyze this site (${attempt.error})`;
+    console.error(`[audit] PageSpeed failed for ${website}: ${attempt.error}`);
+    return { scores: generateUnavailableScores(reason), error: reason };
+  }
+
+  const data = attempt.data;
+  const cats = data.lighthouseResult?.categories || {};
+  const scores: AuditScore[] = [];
+
+  if (cats.performance) {
+    const perfScore = Math.round((cats.performance.score || 0) * 100);
+    scores.push({
+      label: "Performance",
+      score: perfScore,
+      details: getPerformanceDetails(perfScore, data.lighthouseResult?.audits),
+    });
+  }
+
+  if (cats.seo) {
+    const seoScore = Math.round((cats.seo.score || 0) * 100);
+    scores.push({
+      label: "SEO",
+      score: seoScore,
+      details: getSEODetails(seoScore, data.lighthouseResult?.audits),
+    });
+  }
+
+  if (cats.accessibility) {
+    const a11yScore = Math.round((cats.accessibility.score || 0) * 100);
+    scores.push({
+      label: "Accessibility",
+      score: a11yScore,
+      details: getAccessibilityDetails(a11yScore),
+    });
+  }
+
+  if (cats["best_practices"]) {
+    const bpScore = Math.round((cats["best_practices"].score || 0) * 100);
+    scores.push({
+      label: "Best Practices",
+      score: bpScore,
+      details: getBestPracticesDetails(bpScore),
+    });
+  }
+
+  if (scores.length === 0) {
+    const reason = "PageSpeed Insights returned no category scores for this site";
+    console.error(`[audit] ${reason}: ${website}`);
+    return { scores: generateUnavailableScores(reason), error: reason };
+  }
+
+  const perfVal = scores.find(s => s.label === "Performance")?.score ?? 50;
+  const a11yVal = scores.find(s => s.label === "Accessibility")?.score ?? 50;
+  const uxScore = Math.round((perfVal * 0.4 + a11yVal * 0.6));
+  scores.push({
+    label: "UX / Design",
+    score: uxScore,
+    details: getUXDetails(uxScore),
+  });
+
+  return { scores };
 }
 
-function generateEstimatedScores(): AuditScore[] {
+function generateUnavailableScores(reason: string): AuditScore[] {
   return [
-    { label: "Performance", score: 0, details: ["Could not analyze — website may be unreachable"] },
-    { label: "SEO", score: 0, details: ["Could not analyze — website may be unreachable"] },
-    { label: "Accessibility", score: 0, details: ["Could not analyze — website may be unreachable"] },
-    { label: "Best Practices", score: 0, details: ["Could not analyze — website may be unreachable"] },
-    { label: "UX / Design", score: 0, details: ["Could not analyze — website may be unreachable"] },
+    { label: "Performance", score: 0, unavailable: true, details: [reason] },
+    { label: "SEO", score: 0, unavailable: true, details: [reason] },
+    { label: "Accessibility", score: 0, unavailable: true, details: [reason] },
+    { label: "Best Practices", score: 0, unavailable: true, details: [reason] },
+    { label: "UX / Design", score: 0, unavailable: true, details: [reason] },
   ];
 }
 
@@ -378,7 +414,9 @@ function generateRecommendations(hasWebsite: boolean, scores: AuditScore[], soci
     return recs;
   }
 
-  for (const s of scores) {
+  const usable = scores.filter(s => !s.unavailable);
+
+  for (const s of usable) {
     if (s.score < 50) {
       if (s.label === "Performance") recs.push("Optimize website speed — compress images, enable caching, minimize JavaScript");
       if (s.label === "SEO") recs.push("Implement comprehensive SEO strategy — meta tags, structured data, keyword optimization");
@@ -392,7 +430,10 @@ function generateRecommendations(hasWebsite: boolean, scores: AuditScore[], soci
     }
   }
 
-  if (recs.length === 0) {
+  if (usable.length === 0) {
+    recs.push("Run a manual review of the website — automated analysis was unavailable");
+    recs.push("Validate the site's mobile responsiveness, page speed, and SEO basics manually");
+  } else if (recs.length === 0) {
     recs.push("Website is solid — focus on conversion rate optimization");
     recs.push("Implement A/B testing to optimize key landing pages");
   }
@@ -404,7 +445,9 @@ function generateRecommendations(hasWebsite: boolean, scores: AuditScore[], soci
 }
 
 function getOverallGrade(scores: AuditScore[]): string {
-  const avg = scores.reduce((sum, s) => sum + s.score, 0) / scores.length;
+  const usable = scores.filter(s => !s.unavailable);
+  if (usable.length === 0) return "—";
+  const avg = usable.reduce((sum, s) => sum + s.score, 0) / usable.length;
   if (avg >= 90) return "A+";
   if (avg >= 80) return "A";
   if (avg >= 70) return "B";
@@ -436,7 +479,16 @@ function generateOpportunities(hasWebsite: boolean, scores: AuditScore[], compet
   }
 
   const opps: string[] = [];
-  const avg = scores.reduce((sum, s) => sum + s.score, 0) / scores.length;
+  const usable = scores.filter(s => !s.unavailable);
+
+  if (usable.length === 0) {
+    opps.push("Confirm site performance manually — automated analysis was unavailable");
+    opps.push("A walk-through audit can still surface conversion, SEO, and design wins");
+    opps.push("Targeted advertising could deliver 5-10x ROI on ad spend");
+    return opps;
+  }
+
+  const avg = usable.reduce((sum, s) => sum + s.score, 0) / usable.length;
 
   if (avg < 50) {
     opps.push("Potential to increase online leads by 200-300% with website overhaul");
@@ -480,9 +532,15 @@ export async function POST(request: NextRequest) {
     ]);
 
     // Only run PageSpeed if there IS a website — otherwise generate insight-driven scores
-    const scores = hasWebsite
-      ? await getPageSpeedScores(enrichedBusiness.website!)
-      : generateNoWebsiteScores(competitors, socialProfiles);
+    let scores: AuditScore[];
+    let auditError: string | undefined;
+    if (hasWebsite) {
+      const result = await getPageSpeedScores(enrichedBusiness.website!);
+      scores = result.scores;
+      auditError = result.error;
+    } else {
+      scores = generateNoWebsiteScores(competitors, socialProfiles);
+    }
 
     const recommendations = generateRecommendations(hasWebsite, scores, socialProfiles);
     const overallGrade = getOverallGrade(scores);
@@ -516,6 +574,7 @@ export async function POST(request: NextRequest) {
       overallGrade,
       opportunities,
       onlinePresence,
+      auditError,
     };
 
     return Response.json(result);

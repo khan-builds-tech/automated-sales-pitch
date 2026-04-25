@@ -17,7 +17,7 @@ export function generateEmailDraft(audit: AuditResult): { subject: string; body:
     : `${biz.name} — How a Digital Presence Can Transform Your Business`;
 
   const scoresSummary = audit.scores
-    .map(s => `  • ${s.label}: ${s.score}/100`)
+    .map(s => s.unavailable ? `  • ${s.label}: unavailable` : `  • ${s.label}: ${s.score}/100`)
     .join("\n");
 
   const recommendationsList = audit.recommendations
@@ -93,12 +93,14 @@ ${firmName}`;
 
 function generateHTML(audit: AuditResult, firmName: string, CALENDLY_URL: string): string {
   const biz = audit.business;
-  const gradeColor = audit.overallGrade.startsWith("A") ? "#22c55e"
+  const gradeColor = audit.overallGrade === "—" ? "#9ca3af"
+    : audit.overallGrade.startsWith("A") ? "#22c55e"
     : audit.overallGrade === "B" ? "#3b82f6"
     : audit.overallGrade === "C" ? "#eab308"
     : "#ef4444";
 
-  const scoreRows = audit.scores.map(s => {
+  const usableScores = audit.scores.filter(s => !s.unavailable);
+  const scoreRows = usableScores.map(s => {
     const barColor = s.score >= 80 ? "#22c55e" : s.score >= 50 ? "#eab308" : "#ef4444";
     return `
       <tr>
@@ -164,6 +166,7 @@ function generateHTML(audit: AuditResult, firmName: string, CALENDLY_URL: string
     </div>
 
     <!-- Scores -->
+    ${usableScores.length > 0 ? `
     <div style="background: white; padding: 24px;">
       <h2 style="color: #1a1a2e; font-size: 16px; margin: 0 0 16px; padding-bottom: 8px; border-bottom: 2px solid #f0f0f0;">
         ${audit.hasWebsite ? "Audit Scores" : "Current Digital Status"}
@@ -171,7 +174,7 @@ function generateHTML(audit: AuditResult, firmName: string, CALENDLY_URL: string
       <table style="width: 100%; border-collapse: collapse;">
         ${scoreRows}
       </table>
-    </div>
+    </div>` : ""}
 
     <!-- Recommendations -->
     <div style="background: white; padding: 24px; border-top: 1px solid #eee;">

@@ -18,6 +18,7 @@ export interface AuditScore {
   label: string;
   score: number; // 0-100
   details: string[];
+  unavailable?: boolean;
 }
 
 export interface SocialProfile {
@@ -52,6 +53,7 @@ export interface AuditResult {
   overallGrade: string;
   opportunities: string[];
   onlinePresence?: OnlinePresence;
+  auditError?: string;
 }
 
 export interface EmailDraft {

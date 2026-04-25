@@ -10,7 +10,8 @@ interface Props {
 }
 
 export default function AuditReport({ audit, onProceed }: Props) {
-  const gradeColor = audit.overallGrade.startsWith("A") ? "#22c55e"
+  const gradeColor = audit.overallGrade === "—" ? "#555"
+    : audit.overallGrade.startsWith("A") ? "#22c55e"
     : audit.overallGrade === "B" ? "#3b82f6"
     : audit.overallGrade === "C" ? "#eab308"
     : "#ef4444";
@@ -42,6 +43,16 @@ export default function AuditReport({ audit, onProceed }: Props) {
             <div>
               <p className="text-sm font-medium text-[#ef4444]">No Website Detected</p>
               <p className="text-xs text-[#888] mt-0.5">This business has no digital presence — a significant growth opportunity.</p>
+            </div>
+          </div>
+        )}
+
+        {audit.hasWebsite && audit.auditError && (
+          <div className="bg-[#eab308]/10 border border-[#eab308]/20 rounded-lg p-3 flex items-start gap-2">
+            <AlertTriangle size={16} className="text-[#eab308] mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-[#eab308]">Automated audit unavailable</p>
+              <p className="text-xs text-[#888] mt-0.5">{audit.auditError}. Scores below could not be measured — review the site manually before relying on the report.</p>
             </div>
           </div>
         )}
@@ -161,7 +172,7 @@ export default function AuditReport({ audit, onProceed }: Props) {
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-6">
           {audit.scores.map((s) => (
             <div key={s.label} className="relative flex flex-col items-center">
-              <ScoreRing score={s.score} label={s.label} />
+              <ScoreRing score={s.score} label={s.label} unavailable={s.unavailable} />
             </div>
           ))}
         </div>
@@ -173,9 +184,13 @@ export default function AuditReport({ audit, onProceed }: Props) {
           <div key={s.label} className="bg-[#111] border border-[#222] rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-semibold text-white">{s.label}</span>
-              <span className={`text-sm font-bold ${s.score >= 80 ? "text-[#22c55e]" : s.score >= 50 ? "text-[#eab308]" : "text-[#ef4444]"}`}>
-                {s.score}/100
-              </span>
+              {s.unavailable ? (
+                <span className="text-sm font-bold text-[#666]">—</span>
+              ) : (
+                <span className={`text-sm font-bold ${s.score >= 80 ? "text-[#22c55e]" : s.score >= 50 ? "text-[#eab308]" : "text-[#ef4444]"}`}>
+                  {s.score}/100
+                </span>
+              )}
             </div>
             <ul className="space-y-1">
               {s.details.map((d, i) => (

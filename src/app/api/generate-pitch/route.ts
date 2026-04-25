@@ -52,7 +52,9 @@ function buildAuditSummary(audit: AuditResult): string {
     `Overall Grade: ${audit.overallGrade}`,
     "",
     "AUDIT SCORES:",
-    ...audit.scores.map(s => `  ${s.label}: ${s.score}/100 — ${s.details.join("; ")}`),
+    ...audit.scores.map(s => s.unavailable
+      ? `  ${s.label}: unavailable — ${s.details.join("; ")}`
+      : `  ${s.label}: ${s.score}/100 — ${s.details.join("; ")}`),
     "",
     "RECOMMENDATIONS:",
     ...audit.recommendations.map(r => `  - ${r}`),
@@ -84,12 +86,14 @@ function buildEmailHTML(subject: string, body: string, audit: AuditResult): stri
   const biz = audit.business;
   const calendlyUrl = getCalendlyUrl();
   const calendlyDisplay = calendlyUrl.replace(/^https?:\/\//, "");
-  const gradeColor = audit.overallGrade.startsWith("A") ? "#22c55e"
+  const gradeColor = audit.overallGrade === "—" ? "#9ca3af"
+    : audit.overallGrade.startsWith("A") ? "#22c55e"
     : audit.overallGrade === "B" ? "#3b82f6"
     : audit.overallGrade === "C" ? "#eab308"
     : "#ef4444";
 
-  const scoreRows = audit.scores.map(s => {
+  const usableScores = audit.scores.filter(s => !s.unavailable);
+  const scoreRows = usableScores.map(s => {
     const barColor = s.score >= 80 ? "#22c55e" : s.score >= 50 ? "#eab308" : "#ef4444";
     return `
       <tr>
@@ -141,12 +145,13 @@ function buildEmailHTML(subject: string, body: string, audit: AuditResult): stri
     </div>
 
     <!-- Scores Table -->
+    ${usableScores.length > 0 ? `
     <div style="background: #ffffff; padding: 24px 16px;">
       <h2 style="color: #111827; font-size: 16px; font-weight: 700; margin: 0 0 16px 16px; padding-bottom: 10px; border-bottom: 2px solid #f3f4f6;">
         ${audit.hasWebsite ? "Your Website Audit" : "Digital Presence Analysis"}
       </h2>
       <table style="width: 100%; border-collapse: collapse;">${scoreRows}</table>
-    </div>
+    </div>` : ""}
 
     <!-- Email Body -->
     <div style="background: #ffffff; padding: 28px 32px; border-top: 1px solid #e5e7eb;">
