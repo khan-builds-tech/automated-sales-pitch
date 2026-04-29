@@ -54,6 +54,8 @@ export interface AuditResult {
   opportunities: string[];
   onlinePresence?: OnlinePresence;
   auditError?: string;
+  siteBroken?: boolean;
+  socialOnlyPlatform?: string;
 }
 
 export interface EmailDraft {

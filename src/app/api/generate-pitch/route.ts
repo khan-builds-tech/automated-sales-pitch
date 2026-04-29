@@ -41,14 +41,23 @@ VALUE PROPOSITIONS:
 
 function buildAuditSummary(audit: AuditResult): string {
   const biz = audit.business;
+  const websiteLine = audit.socialOnlyPlatform
+    ? `${biz.website} (${audit.socialOnlyPlatform} only — NO real website)`
+    : (biz.website || "NONE — no website detected");
   const lines: string[] = [
     `Business Name: ${biz.name}`,
     `Location: ${biz.address}`,
-    `Website: ${biz.website || "NONE — no website detected"}`,
+    `Website: ${websiteLine}`,
     `Phone: ${biz.phone || "Not available"}`,
     `Rating: ${biz.rating ? `${biz.rating}/5 (${biz.total_ratings || 0} reviews)` : "N/A"}`,
     `Business Type: ${biz.types?.join(", ") || "Unknown"}`,
     `Has Website: ${audit.hasWebsite ? "Yes" : "No"}`,
+    audit.socialOnlyPlatform
+      ? `Pitch Angle: This business has ONLY a ${audit.socialOnlyPlatform} presence — no actual website. Frame the pitch around converting their social audience into owned, measurable revenue via a real website.`
+      : "",
+    audit.siteBroken
+      ? `Pitch Angle: The business website is BROKEN/UNREACHABLE (returned errors during automated checks). Frame the pitch around urgency: every day the site is down they are losing leads to competitors, and our team can diagnose and rebuild it.`
+      : "",
     `Overall Grade: ${audit.overallGrade}`,
     "",
     "AUDIT SCORES:",

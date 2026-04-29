@@ -41,13 +41,31 @@ export default function AuditReport({ audit, onProceed }: Props) {
           <div className="bg-[#ef4444]/10 border border-[#ef4444]/20 rounded-lg p-3 flex items-start gap-2">
             <AlertTriangle size={16} className="text-[#ef4444] mt-0.5 flex-shrink-0" />
             <div>
-              <p className="text-sm font-medium text-[#ef4444]">No Website Detected</p>
-              <p className="text-xs text-[#888] mt-0.5">This business has no digital presence — a significant growth opportunity.</p>
+              <p className="text-sm font-medium text-[#ef4444]">
+                {audit.socialOnlyPlatform
+                  ? `${audit.socialOnlyPlatform}-Only Presence — No Website Detected`
+                  : "No Website Detected"}
+              </p>
+              <p className="text-xs text-[#888] mt-0.5">
+                {audit.socialOnlyPlatform
+                  ? `This business relies entirely on ${audit.socialOnlyPlatform} for online discovery. A dedicated website would convert that audience into owned, measurable revenue.`
+                  : "This business has no digital presence — a significant growth opportunity."}
+              </p>
             </div>
           </div>
         )}
 
-        {audit.hasWebsite && audit.auditError && (
+        {audit.hasWebsite && audit.siteBroken && (
+          <div className="bg-[#ef4444]/10 border border-[#ef4444]/20 rounded-lg p-3 flex items-start gap-2">
+            <AlertTriangle size={16} className="text-[#ef4444] mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-[#ef4444]">Your website appears to be broken or unreachable</p>
+              <p className="text-xs text-[#888] mt-0.5">{audit.auditError} We can diagnose the issue and rebuild on a reliable, modern stack — typically within 2-4 weeks.</p>
+            </div>
+          </div>
+        )}
+
+        {audit.hasWebsite && !audit.siteBroken && audit.auditError && (
           <div className="bg-[#eab308]/10 border border-[#eab308]/20 rounded-lg p-3 flex items-start gap-2">
             <AlertTriangle size={16} className="text-[#eab308] mt-0.5 flex-shrink-0" />
             <div>
