@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { AuditResult, SalesPitch } from "@/lib/types";
 import { getPitchByPlaceId, updatePitchStatus } from "@/lib/pitch-storage";
-import { Send, Phone, Mail, Eye, Edit3, Loader2, AlertCircle, Copy, CheckCircle2 } from "lucide-react";
+import { Send, Phone, Mail, Eye, Edit3, Loader2, AlertCircle, Copy, CheckCircle2, Search } from "lucide-react";
 import { useCurrentUser } from "@/lib/user-context";
-import { validateRecipients } from "@/lib/email-utils";
+import { parseRecipients, validateRecipients } from "@/lib/email-utils";
 
 interface Props {
   audit: AuditResult;
@@ -28,8 +28,60 @@ export default function SalesPitchView({ audit, pitch, onEmailSent }: Props) {
   const [copied, setCopied] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
   const [called, setCalled] = useState(false);
+  const [fetchingEmails, setFetchingEmails] = useState(false);
+  const [fetchInfo, setFetchInfo] = useState<string | null>(null);
   const currentUser = useCurrentUser();
   const ownerFilter = currentUser.role === "admin" ? null : currentUser.email;
+
+  const website = audit.business.website || "";
+
+  const handleFetchEmails = async () => {
+    if (!website) return;
+    setFetchingEmails(true);
+    setFetchInfo(null);
+    try {
+      const res = await fetch("/api/fetch-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: website }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFetchInfo(data.error || "Couldn't fetch from website");
+        setFetchingEmails(false);
+        return;
+      }
+      const found: string[] = Array.isArray(data.emails) ? data.emails : [];
+      const pagesScanned: number = typeof data.pagesScanned === "number" ? data.pagesScanned : 0;
+
+      if (found.length === 0) {
+        setFetchInfo(
+          pagesScanned === 0
+            ? "Couldn't reach the website"
+            : "No emails found on the website"
+        );
+      } else {
+        const existing = parseRecipients(to);
+        const merged: string[] = [];
+        const seen = new Set<string>();
+        for (const e of [...existing, ...found]) {
+          const lower = e.toLowerCase();
+          if (!seen.has(lower)) {
+            seen.add(lower);
+            merged.push(e);
+          }
+        }
+        setTo(merged.join(", "));
+        setError("");
+        setFetchInfo(
+          `Found ${found.length} email${found.length === 1 ? "" : "s"} (scanned ${pagesScanned} page${pagesScanned === 1 ? "" : "s"})`
+        );
+      }
+    } catch {
+      setFetchInfo("Couldn't fetch from website");
+    }
+    setFetchingEmails(false);
+  };
 
   const handleSend = async () => {
     const toCheck = validateRecipients(to);
@@ -123,11 +175,21 @@ export default function SalesPitchView({ audit, pitch, onEmailSent }: Props) {
                 <input
                   type="text"
                   value={to}
-                  onChange={(e) => { setTo(e.target.value); setError(""); }}
+                  onChange={(e) => { setTo(e.target.value); setError(""); setFetchInfo(null); }}
                   placeholder="recipient@business.com, another@business.com"
                   className="flex-1 bg-transparent text-sm text-white placeholder-[#444] outline-none"
                 />
                 <div className="flex items-center gap-2 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={handleFetchEmails}
+                    disabled={!website || fetchingEmails}
+                    title={website ? "Scan the business website for email addresses" : "No website on file"}
+                    className="text-[#666] hover:text-[#3b82f6] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1"
+                  >
+                    {fetchingEmails ? <Loader2 size={11} className="animate-spin" /> : <Search size={11} />}
+                    {fetchingEmails ? "Fetching..." : "Fetch"}
+                  </button>
                   {!showCc && (
                     <button
                       type="button"
@@ -148,6 +210,9 @@ export default function SalesPitchView({ audit, pitch, onEmailSent }: Props) {
                   )}
                 </div>
               </div>
+              {fetchInfo && (
+                <p className="text-[11px] text-[#666] pl-[3.75rem]">{fetchInfo}</p>
+              )}
               {showCc && (
                 <div className="flex items-center gap-3">
                   <label className="text-xs text-[#666] w-12 flex-shrink-0">Cc:</label>
