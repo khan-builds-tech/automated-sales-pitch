@@ -1,11 +1,25 @@
 import { NextRequest } from "next/server";
 import nodemailer from "nodemailer";
+import { isValidEmail, normalizeRecipients } from "@/lib/email-utils";
 
 export async function POST(request: NextRequest) {
-  const { to, subject, html } = await request.json();
+  const { to, cc, bcc, subject, html } = await request.json();
 
-  if (!to || !subject || !html) {
-    return Response.json({ error: "Missing required fields: to, subject, html" }, { status: 400 });
+  if (!subject || !html) {
+    return Response.json({ error: "Missing required fields: subject, html" }, { status: 400 });
+  }
+
+  const toList = normalizeRecipients(to);
+  const ccList = normalizeRecipients(cc);
+  const bccList = normalizeRecipients(bcc);
+
+  if (toList.length === 0) {
+    return Response.json({ error: "At least one recipient is required" }, { status: 400 });
+  }
+
+  const allInvalid = [...toList, ...ccList, ...bccList].filter((e) => !isValidEmail(e));
+  if (allInvalid.length > 0) {
+    return Response.json({ error: `Invalid email address: ${allInvalid.join(", ")}` }, { status: 400 });
   }
 
   const smtpHost = process.env.SMTP_HOST;
@@ -33,7 +47,9 @@ export async function POST(request: NextRequest) {
 
     await transporter.sendMail({
       from: `"${firmName}" <${firmEmail}>`,
-      to,
+      to: toList,
+      cc: ccList.length > 0 ? ccList : undefined,
+      bcc: bccList.length > 0 ? bccList : undefined,
       subject,
       html,
     });

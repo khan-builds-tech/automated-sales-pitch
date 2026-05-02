@@ -1,8 +1,11 @@
 import { NextRequest } from "next/server";
 import nodemailer from "nodemailer";
+import { isValidEmail, normalizeRecipients } from "@/lib/email-utils";
 
 interface CatchupPayload {
-  to: string;
+  to: string | string[];
+  cc?: string | string[];
+  bcc?: string | string[];
   originalSubject: string;
   businessName: string;
   overallGrade: string;
@@ -87,10 +90,23 @@ function buildCatchupHTML(payload: CatchupPayload): string {
 
 export async function POST(request: NextRequest) {
   const payload = (await request.json()) as CatchupPayload;
-  const { to, originalSubject, businessName, overallGrade } = payload;
+  const { originalSubject, businessName, overallGrade } = payload;
 
-  if (!to || !originalSubject || !businessName || !overallGrade) {
-    return Response.json({ error: "Missing required fields: to, originalSubject, businessName, overallGrade" }, { status: 400 });
+  if (!originalSubject || !businessName || !overallGrade) {
+    return Response.json({ error: "Missing required fields: originalSubject, businessName, overallGrade" }, { status: 400 });
+  }
+
+  const toList = normalizeRecipients(payload.to);
+  const ccList = normalizeRecipients(payload.cc);
+  const bccList = normalizeRecipients(payload.bcc);
+
+  if (toList.length === 0) {
+    return Response.json({ error: "At least one recipient is required" }, { status: 400 });
+  }
+
+  const allInvalid = [...toList, ...ccList, ...bccList].filter((e) => !isValidEmail(e));
+  if (allInvalid.length > 0) {
+    return Response.json({ error: `Invalid email address: ${allInvalid.join(", ")}` }, { status: 400 });
   }
 
   const smtpHost = process.env.SMTP_HOST;
@@ -118,7 +134,9 @@ export async function POST(request: NextRequest) {
 
     await transporter.sendMail({
       from: `"${firmName}" <${firmEmail}>`,
-      to,
+      to: toList,
+      cc: ccList.length > 0 ? ccList : undefined,
+      bcc: bccList.length > 0 ? bccList : undefined,
       subject: threadedSubject,
       html: buildCatchupHTML(payload),
     });

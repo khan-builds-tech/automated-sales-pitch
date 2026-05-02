@@ -15,7 +15,7 @@ async function getPlaceDetails(placeId: string, apiKey: string): Promise<Partial
   const res = await fetch(`https://places.googleapis.com/v1/places/${placeId}`, {
     headers: {
       "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask": "displayName,formattedAddress,nationalPhoneNumber,websiteUri,rating,userRatingCount,types",
+      "X-Goog-FieldMask": "displayName,formattedAddress,internationalPhoneNumber,nationalPhoneNumber,websiteUri,rating,userRatingCount,types",
     },
   });
   if (!res.ok) return {};
@@ -23,7 +23,7 @@ async function getPlaceDetails(placeId: string, apiKey: string): Promise<Partial
   return {
     name: r.displayName?.text,
     address: r.formattedAddress,
-    phone: r.nationalPhoneNumber,
+    phone: r.internationalPhoneNumber || r.nationalPhoneNumber,
     website: r.websiteUri,
     rating: r.rating,
     total_ratings: r.userRatingCount,
