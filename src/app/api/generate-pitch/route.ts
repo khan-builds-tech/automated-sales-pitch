@@ -131,7 +131,7 @@ function buildEmailHTML(subject: string, body: string, audit: AuditResult): stri
     <!-- Header -->
     <div style="background: linear-gradient(135deg, #1a56db 0%, #1e40af 100%); border-radius: 16px 16px 0 0; padding: 36px 32px; text-align: center;">
       <h1 style="color: #ffffff; margin: 0 0 4px; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Infra2Rise</h1>
-      <p style="color: #bfdbfe; margin: 0; font-size: 13px; font-weight: 400;">Digital Growth Report for ${biz.name}</p>
+      <p style="color: #ffffff; margin: 0; font-size: 13px; font-weight: 400;">Digital Growth Report for ${biz.name}</p>
     </div>
 
     <!-- Grade Badge -->
@@ -219,9 +219,9 @@ function buildEmailHTML(subject: string, body: string, audit: AuditResult): stri
     <!-- CTA -->
     <div style="background: linear-gradient(135deg, #1a56db 0%, #1e40af 100%); padding: 36px 32px; text-align: center;">
       <h2 style="color: #ffffff; margin: 0 0 10px; font-size: 20px; font-weight: 700;">Ready to Grow Your Business?</h2>
-      <p style="color: #bfdbfe; margin: 0 0 24px; font-size: 14px; line-height: 1.5;">Book a free consultation with our team — no commitment required.</p>
+      <p style="color: #ffffff; margin: 0 0 24px; font-size: 14px; line-height: 1.5;">Book a free consultation with our team — no commitment required.</p>
       <a href="${calendlyUrl}" style="display: inline-block; background: #ffffff; color: #1a56db; font-weight: 700; font-size: 15px; padding: 14px 36px; border-radius: 10px; text-decoration: none;">📅 Schedule a Call</a>
-      <p style="color: #bfdbfe; font-size: 12px; margin: 14px 0 0;">${calendlyDisplay}</p>
+      <p style="color: #ffffff; font-size: 12px; margin: 14px 0 0;">${calendlyDisplay}</p>
     </div>
 
     <!-- Footer -->
