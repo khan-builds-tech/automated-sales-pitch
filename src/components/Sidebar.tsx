@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Search,
   FileText,
+  Building2,
   Sparkles,
   ChevronLeft,
   ChevronRight,
@@ -20,6 +21,7 @@ const baseNavItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/search", label: "Search", icon: Search },
   { href: "/pitches", label: "Saved Pitches", icon: FileText },
+  { href: "/leads-no-website", label: "No-Website Leads", icon: Building2 },
 ];
 
 export interface SidebarUser {

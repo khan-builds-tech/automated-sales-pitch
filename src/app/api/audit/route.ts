@@ -167,7 +167,7 @@ async function getPageSpeedScores(website: string): Promise<PageSpeedResult> {
   const apiKey = process.env.PAGESPEED_API_KEY;
   const categories = ["performance", "seo", "accessibility", "best_practices"];
   const catParams = categories.map(c => `category=${c.toUpperCase()}`).join("&");
-  const url = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(website)}&${catParams}${apiKey ? `&key=${apiKey}` : ""}`;
+  const url = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(website)}&strategy=mobile&${catParams}${apiKey ? `&key=${apiKey}` : ""}`;
 
   let attempt = await fetchPageSpeed(url, 75000);
   if (attempt.error === "timeout") {

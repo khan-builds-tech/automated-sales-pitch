@@ -5,19 +5,21 @@ import { Star, Globe, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 
 interface Filters {
   minRating: number;
-  websiteFilter: "all" | "has" | "none";
   pitchedFilter: "all" | "pitched" | "new";
 }
 
 interface Props {
   filters: Filters;
   onChange: (f: Filters) => void;
+  showPitchedFilter?: boolean;
 }
 
 export type { Filters };
 
-export default function SearchFilters({ filters, onChange }: Props) {
+export default function SearchFilters({ filters, onChange, showPitchedFilter = true }: Props) {
   const [expanded, setExpanded] = useState(false);
+
+  const hasActiveFilters = filters.minRating > 0 || (showPitchedFilter && filters.pitchedFilter !== "all");
 
   return (
     <div className="bg-[#111] border border-[#222] rounded-xl overflow-hidden mb-4">
@@ -27,7 +29,7 @@ export default function SearchFilters({ filters, onChange }: Props) {
       >
         <span className="flex items-center gap-2">
           <Globe size={14} /> Filters
-          {(filters.minRating > 0 || filters.websiteFilter !== "all" || filters.pitchedFilter !== "all") && (
+          {hasActiveFilters && (
             <span className="w-2 h-2 rounded-full bg-[#3b82f6]" />
           )}
         </span>
@@ -56,59 +58,37 @@ export default function SearchFilters({ filters, onChange }: Props) {
             </div>
           </div>
 
-          {/* Website Filter */}
-          <div>
-            <label className="text-xs text-[#666] uppercase tracking-wider mb-2 block">Website</label>
-            <div className="flex gap-2">
-              {([
-                { value: "all", label: "All" },
-                { value: "has", label: "Has Website" },
-                { value: "none", label: "No Website" },
-              ] as const).map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => onChange({ ...filters, websiteFilter: opt.value })}
-                  className={`text-xs px-3 py-1.5 rounded-lg border transition-colors cursor-pointer ${
-                    filters.websiteFilter === opt.value
-                      ? "bg-[#3b82f6]/10 text-[#3b82f6] border-[#3b82f6]/20"
-                      : "border-[#222] text-[#666] hover:text-[#888] hover:border-[#333]"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Pitch Status */}
-          <div>
-            <label className="text-xs text-[#666] uppercase tracking-wider mb-2 block">Pitch Status</label>
-            <div className="flex gap-2 flex-wrap">
-              {([
-                { value: "all", label: "All", icon: false },
-                { value: "pitched", label: "Already Pitched", icon: true },
-                { value: "new", label: "New Prospects", icon: false },
-              ] as const).map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => onChange({ ...filters, pitchedFilter: opt.value })}
-                  className={`text-xs px-3 py-1.5 rounded-lg border transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    filters.pitchedFilter === opt.value
-                      ? "bg-[#8b5cf6]/10 text-[#8b5cf6] border-[#8b5cf6]/20"
-                      : "border-[#222] text-[#666] hover:text-[#888] hover:border-[#333]"
-                  }`}
-                >
-                  {opt.icon && <Sparkles size={10} className="fill-current" />}
-                  {opt.label}
-                </button>
-              ))}
+          {showPitchedFilter && (
+            <div>
+              <label className="text-xs text-[#666] uppercase tracking-wider mb-2 block">Pitch Status</label>
+              <div className="flex gap-2 flex-wrap">
+                {([
+                  { value: "all", label: "All", icon: false },
+                  { value: "pitched", label: "Already Pitched", icon: true },
+                  { value: "new", label: "New Prospects", icon: false },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => onChange({ ...filters, pitchedFilter: opt.value })}
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      filters.pitchedFilter === opt.value
+                        ? "bg-[#8b5cf6]/10 text-[#8b5cf6] border-[#8b5cf6]/20"
+                        : "border-[#222] text-[#666] hover:text-[#888] hover:border-[#333]"
+                    }`}
+                  >
+                    {opt.icon && <Sparkles size={10} className="fill-current" />}
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Clear Filters */}
-          {(filters.minRating > 0 || filters.websiteFilter !== "all" || filters.pitchedFilter !== "all") && (
+          {hasActiveFilters && (
             <button
-              onClick={() => onChange({ minRating: 0, websiteFilter: "all", pitchedFilter: "all" })}
+              onClick={() => onChange({ minRating: 0, pitchedFilter: "all" })}
               className="text-xs text-[#ef4444] hover:underline cursor-pointer"
             >
               Clear filters

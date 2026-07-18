@@ -15,8 +15,11 @@ import { Search, Loader2, ArrowLeft, Clock, CheckSquare, Square } from "lucide-r
 import { addActivity, addSearchHistory, saveLead, generateId, isBusinessSaved, getLeadByPlaceId, updateLead, getSearchHistory } from "@/lib/storage";
 import { useToast } from "@/lib/toast-context";
 import { savePitch as savePitchToFirestore, getPitchByPlaceId as getExistingPitch, getPitchedPlaceIds, updatePitchStatus, SavedPitch } from "@/lib/pitch-storage";
+import { saveNoWebsiteLead, getNoWebsiteLeadPlaceIds } from "@/lib/no-website-leads";
 import PitchDetailModal from "@/components/PitchDetailModal";
 import { useCurrentUser } from "@/lib/user-context";
+
+type ViewMode = "no-website" | "has-website";
 
 export default function SearchPage() {
   return (
@@ -45,10 +48,16 @@ function SearchPageInner() {
   const ownerFilter = currentUser.role === "admin" ? null : currentUser.email;
 
   // Filters
-  const [filters, setFilters] = useState<Filters>({ minRating: 0, websiteFilter: "all", pitchedFilter: "all" });
+  const [filters, setFilters] = useState<Filters>({ minRating: 0, pitchedFilter: "all" });
+
+  // Default to showing businesses without a website — the primary prospecting flow
+  const [viewMode, setViewMode] = useState<ViewMode>("no-website");
 
   // Pitched place IDs (from Firestore)
   const [pitchedIds, setPitchedIds] = useState<Set<string>>(new Set());
+
+  // Non-website leads already saved (from Firestore)
+  const [noWebsiteLeadIds, setNoWebsiteLeadIds] = useState<Set<string>>(new Set());
 
   // Bulk select
   const [bulkMode, setBulkMode] = useState(false);
@@ -81,6 +90,8 @@ function SearchPageInner() {
     setSelected(new Set());
     setBulkMode(false);
     setPitchedIds(new Set());
+    setNoWebsiteLeadIds(new Set());
+    setViewMode("no-website");
 
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
@@ -97,9 +108,10 @@ function SearchPageInner() {
         addActivity("search", `Searched "${q}" — ${data.businesses.length} results`);
         setSearchHistoryState(getSearchHistory().map(h => ({ query: h.query, resultCount: h.resultCount })));
 
-        // Check which businesses already have saved pitches (non-blocking)
+        // Check which businesses already have saved pitches / non-website leads (non-blocking)
         const placeIds = (data.businesses as Business[]).map((b) => b.place_id);
         getPitchedPlaceIds(placeIds, ownerFilter).then(setPitchedIds).catch(() => { /* silent */ });
+        getNoWebsiteLeadPlaceIds(placeIds, ownerFilter).then(setNoWebsiteLeadIds).catch(() => { /* silent */ });
       } else {
         setError("No businesses found. Try a different search.");
       }
@@ -111,16 +123,42 @@ function SearchPageInner() {
 
   const handleSearch = useCallback(() => doSearch(query), [query]);
 
+  const noWebsiteBusinesses = useMemo(() => businesses.filter((b) => !b.website), [businesses]);
+  const hasWebsiteBusinesses = useMemo(() => businesses.filter((b) => !!b.website), [businesses]);
+
   const filteredBusinesses = useMemo(() => {
-    return businesses.filter((b) => {
+    const bucket = viewMode === "no-website" ? noWebsiteBusinesses : hasWebsiteBusinesses;
+    return bucket.filter((b) => {
       if (filters.minRating > 0 && (!b.rating || b.rating < filters.minRating)) return false;
-      if (filters.websiteFilter === "has" && !b.website) return false;
-      if (filters.websiteFilter === "none" && b.website) return false;
-      if (filters.pitchedFilter === "pitched" && !pitchedIds.has(b.place_id)) return false;
-      if (filters.pitchedFilter === "new" && pitchedIds.has(b.place_id)) return false;
+      if (viewMode === "has-website") {
+        if (filters.pitchedFilter === "pitched" && !pitchedIds.has(b.place_id)) return false;
+        if (filters.pitchedFilter === "new" && pitchedIds.has(b.place_id)) return false;
+      }
       return true;
     });
-  }, [businesses, filters, pitchedIds]);
+  }, [viewMode, noWebsiteBusinesses, hasWebsiteBusinesses, filters, pitchedIds]);
+
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    setDisplayCount(10);
+    setSelected(new Set());
+    setBulkMode(false);
+  }, []);
+
+  const handleAddNoWebsiteLead = useCallback(async (biz: Business) => {
+    if (noWebsiteLeadIds.has(biz.place_id)) {
+      toast("Already added to Non-Website Leads", "info");
+      return;
+    }
+    try {
+      await saveNoWebsiteLead(biz, { email: currentUser.email, name: currentUser.name });
+      setNoWebsiteLeadIds((prev) => new Set(prev).add(biz.place_id));
+      addActivity("lead_saved", `Added ${biz.name} to Non-Website Leads`, biz.place_id);
+      toast(`${biz.name} added to Non-Website Leads`, "success");
+    } catch {
+      toast("Failed to add lead — please try again", "error");
+    }
+  }, [noWebsiteLeadIds, currentUser.email, currentUser.name, toast]);
 
   const handleSelect = useCallback(async (biz: Business) => {
     setSelectedBiz(biz);
@@ -378,6 +416,7 @@ function SearchPageInner() {
     setDisplayCount(10);
     setSelected(new Set());
     setBulkMode(false);
+    setViewMode("no-website");
   }, []);
 
   const handleBack = useCallback(() => {
@@ -490,7 +529,7 @@ function SearchPageInner() {
                 Showing {Math.min(displayCount, filteredBusinesses.length)} of {filteredBusinesses.length} results for &quot;{query}&quot;
               </p>
             </div>
-            {pitchedIds.size > 0 && (
+            {viewMode === "has-website" && pitchedIds.size > 0 && (
               <button
                 onClick={() => setFilters((f) => ({ ...f, pitchedFilter: f.pitchedFilter === "pitched" ? "all" : "pitched" }))}
                 className={`text-xs px-3 py-1.5 rounded-full border transition-colors cursor-pointer flex items-center gap-1.5 ${
@@ -506,21 +545,54 @@ function SearchPageInner() {
             )}
           </div>
 
+          {/* View mode toggle: no-website (default) vs has-website */}
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => handleViewModeChange("no-website")}
+              className={`text-sm px-4 py-2 rounded-xl border transition-colors cursor-pointer flex items-center gap-2 ${
+                viewMode === "no-website"
+                  ? "bg-[#ef4444]/10 text-[#ef4444] border-[#ef4444]/30"
+                  : "bg-[#111] text-[#888] border-[#222] hover:text-white hover:border-[#333]"
+              }`}
+            >
+              No Website <span className="text-xs opacity-70">({noWebsiteBusinesses.length})</span>
+            </button>
+            <button
+              onClick={() => handleViewModeChange("has-website")}
+              className={`text-sm px-4 py-2 rounded-xl border transition-colors cursor-pointer flex items-center gap-2 ${
+                viewMode === "has-website"
+                  ? "bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/30"
+                  : "bg-[#111] text-[#888] border-[#222] hover:text-white hover:border-[#333]"
+              }`}
+            >
+              Has Website <span className="text-xs opacity-70">({hasWebsiteBusinesses.length})</span>
+            </button>
+          </div>
+
           {/* Filters */}
-          <SearchFilters filters={filters} onChange={setFilters} />
+          <SearchFilters filters={filters} onChange={setFilters} showPitchedFilter={viewMode === "has-website"} />
 
           {error && <p className="text-sm text-[#ef4444] mb-4">{error}</p>}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {filteredBusinesses.slice(0, displayCount).map((biz) => (
-              <BusinessCard
-                key={biz.place_id}
-                business={biz}
-                onSelect={handleSelect}
-                onSave={handleSaveLead}
-                isSaved={isBusinessSaved(biz.place_id)}
-                isPitched={pitchedIds.has(biz.place_id)}
-              />
+              viewMode === "no-website" ? (
+                <BusinessCard
+                  key={biz.place_id}
+                  business={biz}
+                  onAddNoWebsiteLead={handleAddNoWebsiteLead}
+                  isAddedNoWebsiteLead={noWebsiteLeadIds.has(biz.place_id)}
+                />
+              ) : (
+                <BusinessCard
+                  key={biz.place_id}
+                  business={biz}
+                  onSelect={handleSelect}
+                  onSave={handleSaveLead}
+                  isSaved={isBusinessSaved(biz.place_id)}
+                  isPitched={pitchedIds.has(biz.place_id)}
+                />
+              )
             ))}
           </div>
 
